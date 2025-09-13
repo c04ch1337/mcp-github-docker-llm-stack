@@ -1,0 +1,70 @@
+
+version: "3.9"
+
+services:
+  # === MCP Gateway ===
+  mcp-gateway:
+    image: docker/mcp-gateway:latest
+    container_name: mcp-gateway
+    restart: unless-stopped
+    ports:
+      - "${MCP_GATEWAY_PORT}:8080"
+    environment:
+      - GATEWAY_BASIC_AUTH_USER=${GATEWAY_BASIC_AUTH_USER}
+      - GATEWAY_BASIC_AUTH_PASSWORD=${GATEWAY_BASIC_AUTH_PASSWORD}
+    volumes:
+      - ./mcp/config/gateway.yaml:/etc/mcp/gateway.yaml:ro
+    command: ["gateway", "run", "--config", "/etc/mcp/gateway.yaml"]
+    networks: [mcpnet]
+
+  # === GitHub MCP Server ===
+  github-mcp:
+    image: ghcr.io/github/github-mcp-server:latest
+    container_name: github-mcp
+    restart: unless-stopped
+    environment:
+      - GITHUB_TOKEN=${GITHUB_MCP_TOKEN}
+    ports:
+      - "${GITHUB_MCP_PORT}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [mcpnet]
+
+  # === LLM Inference: Ollama (GPU-capable if host supports it) ===
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT}:11434"
+    environment:
+      - OLLAMA_ORIGINS=*
+    volumes:
+      - ollama-data:/root/.ollama
+      - ./scripts/pull_models_ollama.sh:/docker-entrypoint-init.d/10-pull-models.sh:ro
+    networks: [mcpnet]
+    # GPU will be used automatically if the host has NVIDIA drivers + toolkit
+    # For explicit control, run: docker compose run --gpus all ollama
+
+  # === Optional: llama.cpp HTTP server ===
+  llama-cpp:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: llama-cpp
+    restart: unless-stopped
+    profiles: ["llamacpp"]
+    command: ["--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "${LLAMACPP_PORT}:8080"
+    volumes:
+      - ./models:/models
+    networks: [mcpnet]
+
+networks:
+  mcpnet:
+    driver: bridge
+
+volumes:
+  ollama-data:

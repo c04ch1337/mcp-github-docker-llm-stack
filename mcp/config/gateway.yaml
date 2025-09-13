@@ -1,0 +1,18 @@
+
+version: 1
+
+gateway:
+  http:
+    addr: ":8080"
+  servers:
+    - name: github
+      transport:
+        http:
+          url: "http://github-mcp:3000"
+      limits:
+        requestTimeoutSeconds: 60
+
+clients:
+  - name: vscode
+    allow:
+      - github
